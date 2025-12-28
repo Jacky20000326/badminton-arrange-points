@@ -1,0 +1,177 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用戶表
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  name      String
+  phone     String?
+  role      Role      @default(PLAYER)
+
+  // 關聯
+  playerProfile    PlayerProfile?
+  organizedEvents  Event[]         @relation("organizer")
+  registrations    EventRegistration[]
+  matches1         Match[]         @relation("player1")
+  matches2         Match[]         @relation("player2")
+  matches3         Match[]         @relation("player3")
+  matches4         Match[]         @relation("player4")
+  queueEntries     MatchQueue[]
+  matchHistory1    MatchHistory[]  @relation("player1History")
+  matchHistory2    MatchHistory[]  @relation("player2History")
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+enum Role {
+  PLAYER
+  ORGANIZER
+  ADMIN
+}
+
+// 球員資料表
+model PlayerProfile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillLevel    Int       @db.SmallInt // 1-10
+  totalMatches  Int       @default(0)
+  winRate       Decimal   @default(0) @db.Decimal(5, 2)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// 活動表
+model Event {
+  id            String    @id @default(cuid())
+  organizerId   String
+  organizer     User      @relation("organizer", fields: [organizerId], references: [id])
+  name          String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  courtCount    Int       @db.SmallInt // 場地數量
+  status        EventStatus @default(DRAFT)
+
+  // 關聯
+  registrations EventRegistration[]
+  matches       Match[]
+  queue         MatchQueue[]
+  matchHistory  MatchHistory[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([organizerId])
+  @@index([status])
+  @@index([startTime])
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// 活動報名表
+model EventRegistration {
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  skillLevel    Int       @db.SmallInt // 報名時的技能等級
+  status        RegistrationStatus @default(REGISTERED)
+  registeredAt  DateTime  @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  CHECKED_IN
+  CANCELLED
+}
+
+// 比賽記錄表
+model Match {
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  courtNumber   Int       @db.SmallInt
+
+  // 4 個球員（雙打）
+  player1Id     String
+  player1       User      @relation("player1", fields: [player1Id], references: [id])
+  player2Id     String
+  player2       User      @relation("player2", fields: [player2Id], references: [id])
+  player3Id     String
+  player3       User      @relation("player3", fields: [player3Id], references: [id])
+  player4Id     String
+  player4       User      @relation("player4", fields: [player4Id], references: [id])
+
+  status        MatchStatus @default(WAITING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([eventId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum MatchStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+}
+
+// 配對佇列表
+model MatchQueue {
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  queuePosition Int       @db.SmallInt
+  joinedAt      DateTime  @default(now())
+  waitDuration  Int       @default(0) // 分鐘
+  matchCount    Int       @default(0) // 本活動已比賽次數
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([queuePosition])
+}
+
+// 歷史配對記錄表
+model MatchHistory {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id])
+  player1Id String
+  player1   User      @relation("player1History", fields: [player1Id], references: [id])
+  player2Id String
+  player2   User      @relation("player2History", fields: [player2Id], references: [id])
+  matchedAt DateTime  @default(now())
+
+  @@index([eventId])
+  @@index([player1Id])
+  @@index([player2Id])
+  @@index([matchedAt])
+}
